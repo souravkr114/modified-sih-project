@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EV Charging Station Predictor (SIH BV806)</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- React 18, ReactDOM, Babel -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    body {
+      background-color: #f8fafc;
+      color: #0f172a;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .leaflet-popup-content-wrapper {
+      background: #ffffff !important;
+      color: #0f172a !important;
+      border: 1px solid #cbd5e1 !important;
+      border-radius: 8px !important;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+    }
+    .leaflet-popup-tip {
+      background: #ffffff !important;
+    }
+    .custom-rank-pin, .custom-station-pin {
+      background: none !important;
+      border: none !important;
+    }
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    .btn-electric-blue {
+      background-color: #0099ff !important;
+      color: #ffffff !important;
+    }
+    .btn-electric-blue:hover {
+      background-color: #0080ff !important;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900">
+
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // Comprehensive Delhi Pincode Master Database
+    const DELHI_PINCODES_DB = {
+      '110006': { name: 'Kashmiri Gate & Chandni Chowk', district: 'North Delhi', lat: 28.6698, lng: 77.2285, evBase: 29400, chargers: 38, traffic: 145000, supplyGap: 92.5, topPoi: 'ISBT & Heritage Commercial Corridor' },
+      '110019': { name: 'Nehru Place & Kalkaji', district: 'South East Delhi', lat: 28.5481, lng: 77.2530, evBase: 36200, chargers: 68, traffic: 128000, supplyGap: 88.0, topPoi: 'IT Financial Hub & Metro Interchange' },
+      '110058': { name: 'Janakpuri & Posangipur', district: 'West Delhi', lat: 28.6288, lng: 77.0812, evBase: 38500, chargers: 52, traffic: 110000, supplyGap: 91.0, topPoi: 'District Commercial Centre' },
+      '110092': { name: 'Anand Vihar & Laxmi Nagar', district: 'East Delhi', lat: 28.6475, lng: 77.3150, evBase: 31200, chargers: 44, traffic: 138000, supplyGap: 84.0, topPoi: 'Interstate Transport Terminal' },
+      '110017': { name: 'Saket & Malviya Nagar', district: 'South Delhi', lat: 28.5284, lng: 77.2189, evBase: 42800, chargers: 94, traffic: 120000, supplyGap: 86.0, topPoi: 'Select Citywalk & Press Enclave' },
+      '110001': { name: 'Connaught Place & Central Complex', district: 'Central Delhi', lat: 28.6315, lng: 77.2167, evBase: 24800, chargers: 62, traffic: 160000, supplyGap: 72.0, topPoi: 'Inner & Outer Circle Commercial Corridor' },
+      '110037': { name: 'Aerocity & IGI Airport Hub', district: 'South West Delhi', lat: 28.5492, lng: 77.1215, evBase: 44100, chargers: 88, traffic: 175000, supplyGap: 68.0, topPoi: 'Aerocity Hospitality & Airport Fleet' },
+      '110085': { name: 'Rohini Sector 10 & Pitampura', district: 'North West Delhi', lat: 28.7112, lng: 77.1189, evBase: 32000, chargers: 46, traffic: 95000, supplyGap: 89.0, topPoi: 'Ring Road Mall Corridor' },
+      '110075': { name: 'Dwarka Sector 21 & Transport Hub', district: 'South West Delhi', lat: 28.5521, lng: 77.0583, evBase: 39800, chargers: 56, traffic: 115000, supplyGap: 87.5, topPoi: 'Metro Depot & Convention Centre' },
+      '110020': { name: 'Okhla Industrial Estate Ph-III', district: 'South East Delhi', lat: 28.5362, lng: 77.2714, evBase: 34100, chargers: 50, traffic: 105000, supplyGap: 90.2, topPoi: 'Logistics & 3W Fleet Depot' }
+    };
+
+    // Full Delhi District Matrix Data
+    const DELHI_DISTRICTS_MATRIX = [
+      { name: 'North Delhi', evs: 29400, growth: '+31.8%', chargers: 38, ratio: '773.6 EVs/charger', score: 96, topCorridor: 'Ring Road & GT Road ISBT Corridor' },
+      { name: 'West Delhi', evs: 38500, growth: '+35.2%', chargers: 52, ratio: '740.3 EVs/charger', score: 94, topCorridor: 'Najafgarh Road & Janakpuri District Centre' },
+      { name: 'South East Delhi', evs: 36200, growth: '+42.1%', chargers: 68, ratio: '532.3 EVs/charger', score: 92, topCorridor: 'Outer Ring Road Nehru Place & Okhla' },
+      { name: 'East Delhi', evs: 31200, growth: '+36.9%', chargers: 44, ratio: '709.0 EVs/charger', score: 90, topCorridor: 'Vikas Marg & Anand Vihar Border' },
+      { name: 'North West Delhi', evs: 32000, growth: '+33.4%', chargers: 46, ratio: '695.6 EVs/charger', score: 89, topCorridor: 'Outer Ring Road Rohini Sector 10' },
+      { name: 'South Delhi', evs: 42800, growth: '+38.5%', chargers: 94, ratio: '455.3 EVs/charger', score: 86, topCorridor: 'Press Enclave Road Saket' },
+      { name: 'South West Delhi', evs: 44100, growth: '+40.2%', chargers: 88, ratio: '501.1 EVs/charger', score: 82, topCorridor: 'Aerocity Hospitality & Dwarka Sector 21' },
+      { name: 'Central Delhi', evs: 24800, growth: '+29.4%', chargers: 62, ratio: '400.0 EVs/charger', score: 72, topCorridor: 'Connaught Place Radial Corridors' }
+    ];
+
+    // Baseline Existing Chargers
+    const EXISTING_STATIONS = [
+      { id: 'DEL-STA-001', name: 'Tata Power EZ Charge - Connaught Place', operator: 'Tata Power', lat: 28.6315, lng: 77.2167 },
+      { id: 'DEL-STA-002', name: 'BluSmart EV Hub - Aerocity Metro', operator: 'BluSmart Mobility', lat: 28.5492, lng: 77.1215 },
+      { id: 'DEL-STA-003', name: 'DTL Public Fast Charger - Saket DC', operator: 'Delhi Transco Ltd', lat: 28.5284, lng: 77.2189 },
+      { id: 'DEL-STA-004', name: 'Statiq Hub - Nehru Place Outer Ring', operator: 'Statiq', lat: 28.5494, lng: 77.2519 },
+      { id: 'DEL-STA-005', name: 'Fortum Charge & Drive - Janakpuri DC', operator: 'Fortum', lat: 28.6293, lng: 77.0784 },
+      { id: 'DEL-STA-006', name: 'Exicom Smart Charger - Rohini Sec 10', operator: 'Exicom', lat: 28.7112, lng: 77.1189 },
+      { id: 'DEL-STA-007', name: 'DTL Public Charger - Anand Vihar ISBT', operator: 'Delhi Transco Ltd', lat: 28.6469, lng: 77.3162 }
+    ];
+
+    // Helper: Algorithmic Dynamic Candidate Generator based on input fields
+    function computePredictionResults(pincodeInput, radiusInput, poisInput) {
+      const pinKey = String(pincodeInput).trim();
+      
+      // Fallback geocoder lookup
+      let pinData = DELHI_PINCODES_DB[pinKey];
+      if (!pinData) {
+        const numVal = parseInt(pinKey) || 110006;
+        const latOffset = ((numVal % 100) - 50) * 0.003;
+        const lngOffset = (((numVal / 10) % 100) - 50) * 0.003;
+        pinData = {
+          name: `Pincode ${pinKey} Commercial Zone`,
+          district: 'Delhi NCT',
+          lat: 28.6139 + latOffset,
+          lng: 77.2090 + lngOffset,
+          evBase: 33000 + (numVal % 8000),
+          chargers: 45,
+          traffic: 115000 + (numVal % 25000),
+          supplyGap: 87.5,
+          topPoi: 'Commercial Feeder Road'
+        };
+      }
+
+      const rad = Math.max(1, parseFloat(radiusInput) || 5);
+      const poiList = String(poisInput).toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+
+      const hasHotel = poiList.some(p => p.includes('hotel') || p.includes('lodging') || p.includes('resort'));
+      const hasMall = poiList.some(p => p.includes('mall') || p.includes('store') || p.includes('market') || p.includes('retail'));
+      const hasMetro = poiList.some(p => p.includes('metro') || p.includes('station') || p.includes('bus') || p.includes('transit'));
+
+      const poiScoreBonus = (hasHotel ? 4.2 : 0) + (hasMall ? 5.1 : 0) + (hasMetro ? 6.5 : 0);
+      const baseSessions = Math.round(48 + poiScoreBonus * 3.8 + rad * 1.8);
+      const baseKwh = Math.round(baseSessions * 24);
+
+      const candidate1 = {
+        id: `CAND-${pinKey}-01`,
+        rank: 1,
+        name: `${pinData.name} Primary Transit & Commercial Hub`,
+        district: pinData.district,
+        lat: pinData.lat,
+        lng: pinData.lng,
+        address: `Main Corridor, Pincode ${pinKey}, ${pinData.district}`,
+        score: Math.min(99.6, parseFloat((86.0 + poiScoreBonus + rad * 0.5).toFixed(1))),
+        predictedSessions: baseSessions,
+        predictedKwh: baseKwh,
+        estRoi: parseFloat((25.0 + poiScoreBonus * 1.3).toFixed(1)),
+        estPaybackMonths: Math.max(12, Math.round(23 - poiScoreBonus * 0.7)),
+        shapFeatures: [
+          { feature: `High POI Density (${poiList.join(', ') || 'Commercial Hub'})`, weight: `+${(18 + poiScoreBonus).toFixed(1)}`, desc: `Presence of ${poiList.join(', ') || 'commercial POIs'} generates sustained daily sessions.` },
+          { feature: `Traffic Volume Exposure (${pinData.traffic.toLocaleString()} vehicles/day)`, weight: `+${(14 + pinData.traffic/10000).toFixed(1)}`, desc: `Arterial road exposure within ${rad}km search radius.` },
+          { feature: `District Fleet Adoption (${pinData.evBase.toLocaleString()} EVs)`, weight: '+15.1', desc: `Strong baseline electric vehicle adoption in ${pinData.district}.` }
+        ],
+        gridDistance: '120m',
+        transformer: '1250 kVA',
+        parking: Math.round(18 + poiScoreBonus * 1.4),
+        feasibility: 'Ready (Direct Substation Line)'
+      };
+
+      const candidate2 = {
+        id: `CAND-${pinKey}-02`,
+        rank: 2,
+        name: `${pinData.name} Sector 2 Retail & Workplace Bay`,
+        district: pinData.district,
+        lat: pinData.lat + 0.011,
+        lng: pinData.lng - 0.013,
+        address: `Feeder Outer Ring, Pincode ${pinKey}`,
+        score: Math.min(95.5, parseFloat((82.0 + poiScoreBonus + rad * 0.4).toFixed(1))),
+        predictedSessions: Math.round(baseSessions * 0.82),
+        predictedKwh: Math.round(baseKwh * 0.82),
+        estRoi: parseFloat((21.5 + poiScoreBonus * 1.0).toFixed(1)),
+        estPaybackMonths: Math.max(15, Math.round(25 - poiScoreBonus * 0.6)),
+        shapFeatures: [
+          { feature: 'Workplace Dwell Duration', weight: '+20.2', desc: 'Long daytime parking duration for commuter EV fleet.' },
+          { feature: `Search Radius (${rad}km)`, weight: `+${(9 + rad).toFixed(1)}`, desc: `Covers surrounding commercial feeder zone.` }
+        ],
+        gridDistance: '220m',
+        transformer: '1000 kVA',
+        parking: 24,
+        feasibility: 'Ready'
+      };
+
+      const candidate3 = {
+        id: `CAND-${pinKey}-03`,
+        rank: 3,
+        name: `${pinData.name} Transit & Bus Terminal Depot`,
+        district: pinData.district,
+        lat: pinData.lat - 0.014,
+        lng: pinData.lng + 0.016,
+        address: `Terminal Gate, Pincode ${pinKey}`,
+        score: Math.min(91.8, parseFloat((78.0 + poiScoreBonus + rad * 0.3).toFixed(1))),
+        predictedSessions: Math.round(baseSessions * 0.68),
+        predictedKwh: Math.round(baseKwh * 0.68),
+        estRoi: parseFloat((18.5 + poiScoreBonus * 0.9).toFixed(1)),
+        estPaybackMonths: 26,
+        shapFeatures: [
+          { feature: 'Commercial 3W & Delivery Fleet', weight: '+17.8', desc: 'Frequent quick-charge top-ups.' }
+        ],
+        gridDistance: '310m',
+        transformer: '800 kVA',
+        parking: 16,
+        feasibility: 'Minor Upgrade Required'
+      };
+
+      const districtEvCount = pinData.evBase;
+      const districtChargers = pinData.chargers;
+      const evRatio = (districtEvCount / districtChargers).toFixed(1);
+
+      return {
+        candidates: [candidate1, candidate2, candidate3],
+        pinData,
+        districtEvCount,
+        districtChargers,
+        evRatio
+      };
+    }
+
+    function App() {
+      // Default Form Input State
+      const [formCity, setFormCity] = useState('Delhi');
+      const [formState, setFormState] = useState('Delhi');
+      const [formPincode, setFormPincode] = useState('110006');
+      const [formRadius, setFormRadius] = useState('5');
+      const [formPois, setFormPois] = useState('Hotel, Metro Station, Grocery Store');
+
+      // Calculation Results State
+      const [predictionState, setPredictionState] = useState(() => computePredictionResults('110006', '5', 'Hotel, Metro Station, Grocery Store'));
+      const [selectedCandidate, setSelectedCandidate] = useState(() => predictionState.candidates[0]);
+
+      // Navigation & Modal State
+      const [activeTab, setActiveTab] = useState('intelligence');
+      const [activeRole, setActiveRole] = useState('investor');
+      const [showPredictorModal, setShowPredictorModal] = useState(false);
+      const [toastMsg, setToastMsg] = useState('');
+
+      // Financial Simulator Inputs
+      const [dc50Qty, setDc50Qty] = useState(2);
+      const [ac22Qty, setAc22Qty] = useState(2);
+      const [sellTariff, setSellTariff] = useState(18);
+      const [targetUtil, setTargetUtil] = useState(45);
+      const [siteRent, setSiteRent] = useState(45000);
+
+      const mapContainerRef = useRef(null);
+      const mapInstanceRef = useRef(null);
+
+      // Handle Predict Click -> Recalculates EVERYTHING dynamically!
+      const handleRunPrediction = (e) => {
+        if (e) e.preventDefault();
+        
+        const newResults = computePredictionResults(formPincode, formRadius, formPois);
+        setPredictionState(newResults);
+        setSelectedCandidate(newResults.candidates[0]);
+        setShowPredictorModal(false);
+
+        setToastMsg(`✅ Location Predictions Recalculated for Pincode ${formPincode} (${formRadius} km radius)`);
+        setTimeout(() => setToastMsg(''), 4500);
+      };
+
+      // Render Leaflet Map dynamically when candidate or prediction state updates
+      useEffect(() => {
+        if (!mapContainerRef.current) return;
+        
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.remove();
+        }
+
+        const mapCenter = [selectedCandidate.lat, selectedCandidate.lng];
+        const map = L.map(mapContainerRef.current).setView(mapCenter, 12);
+        mapInstanceRef.current = map;
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+          attribution: '&copy; OpenStreetMap & Delhi GIS'
+        }).addTo(map);
+
+        // Render Candidates Markers in Electric Blue
+        predictionState.candidates.forEach(c => {
+          const isSelected = c.id === selectedCandidate.id;
+          const icon = L.divIcon({
+            className: 'custom-rank-pin',
+            html: `<div class="w-7 h-7 rounded-full ${isSelected ? 'bg-[#0099ff] text-white ring-4 ring-[#0099ff]/30 font-black scale-110 shadow-md' : 'bg-[#0284c7] text-white font-bold'} flex items-center justify-center text-xs border border-white">${c.rank}</div>`,
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
+          });
+
+          const marker = L.marker([c.lat, c.lng], { icon }).addTo(map);
+          marker.bindPopup(`<b>Rank #${c.rank}: ${c.name}</b><br/>Score: ${c.score}/100<br/>Est Sessions: ${c.predictedSessions}/day`);
+          marker.on('click', () => setSelectedCandidate(c));
+
+          if (isSelected) {
+            L.circle([c.lat, c.lng], {
+              radius: (parseFloat(formRadius) || 5) * 400,
+              color: '#0099ff',
+              fillColor: '#0099ff',
+              fillOpacity: 0.15,
+              weight: 2,
+              dashArray: '4,4'
+            }).addTo(map);
+          }
+        });
+
+        // Render Existing Stations
+        EXISTING_STATIONS.forEach(st => {
+          const icon = L.divIcon({
+            className: 'custom-station-pin',
+            html: `<div class="w-4 h-4 rounded-full bg-red-500 border-2 border-white shadow"></div>`,
+            iconSize: [16, 16],
+            iconAnchor: [8, 8]
+          });
+          const marker = L.marker([st.lat, st.lng], { icon }).addTo(map);
+          marker.bindPopup(`<b>${st.name}</b><br/>${st.operator}`);
+        });
+
+        return () => {
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.remove();
+            mapInstanceRef.current = null;
+          }
+        };
+      }, [selectedCandidate, predictionState, formRadius]);
+
+      // Financial Calculation
+      const capexEquipment = (dc50Qty * 1400000) + (ac22Qty * 250000);
+      const totalPowerKw = (dc50Qty * 50) + (ac22Qty * 22);
+      const capexGrid = 350000 + (totalPowerKw * 2500);
+      const totalCapex = capexEquipment + capexGrid;
+
+      const dailyKwh = (totalPowerKw * 18) * (targetUtil / 100);
+      const monthlyRev = dailyKwh * sellTariff * 30;
+      const monthlyPowerCost = dailyKwh * 6.8 * 30;
+      const monthlyOpex = monthlyPowerCost + siteRent + 15000;
+      const monthlyNetProfit = monthlyRev - monthlyOpex;
+      const annualProfit = monthlyNetProfit * 12;
+      const roiPercent = totalCapex > 0 ? ((annualProfit / totalCapex) * 100).toFixed(1) : 0;
+      const paybackMonths = annualProfit > 0 ? Math.round((totalCapex / annualProfit) * 12) : 99;
+
+      return (
+        <div className="flex flex-col min-h-screen bg-slate-50 text-slate-900">
+          
+          {/* Toast Banner */}
+          {toastMsg && (
+            <div className="fixed top-16 right-6 z-[2000] bg-slate-900 text-white px-4 py-2.5 rounded-lg shadow-lg text-xs font-semibold flex items-center gap-2 border border-slate-700">
+              <span>{toastMsg}</span>
+            </div>
+          )}
+
+          {/* Header - Clean White with Solid Electric Blue Button */}
+          <header className="bg-white border-b border-slate-200 px-8 py-3.5 sticky top-0 z-50 flex items-center justify-between shadow-xs">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-[#0099ff] flex items-center justify-center text-white font-bold text-lg shadow-xs">⚡</div>
+              <div>
+                <h1 className="font-bold text-base text-slate-900 tracking-tight">
+                  EV Charging Station Predictor
+                </h1>
+                <p className="text-xs text-slate-500">SIH BV806 • Delhi NCT Decision Platform</p>
+              </div>
+            </div>
+
+            {/* Role Switcher */}
+            <div className="bg-slate-100 p-1 rounded-lg border border-slate-200 flex gap-1 text-xs">
+              <button onClick={() => { setActiveRole('investor'); setActiveTab('intelligence'); }} className={`px-3 py-1.5 rounded-md font-medium transition ${activeRole === 'investor' ? 'bg-[#0099ff] text-white font-bold shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}>Investor</button>
+              <button onClick={() => { setActiveRole('operator'); setActiveTab('intelligence'); }} className={`px-3 py-1.5 rounded-md font-medium transition ${activeRole === 'operator' ? 'bg-[#0099ff] text-white font-bold shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}>Operator</button>
+              <button onClick={() => { setActiveRole('planner'); setActiveTab('district'); }} className={`px-3 py-1.5 rounded-md font-medium transition ${activeRole === 'planner' ? 'bg-[#0099ff] text-white font-bold shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}>MoHUA Planner</button>
+            </div>
+
+            {/* Predict Button matching photo */}
+            <button
+              onClick={() => setShowPredictorModal(true)}
+              className="px-4 py-2 rounded-lg text-xs font-bold btn-electric-blue shadow-xs transition cursor-pointer"
+            >
+              Predict Station Site
+            </button>
+          </header>
+
+          {/* Main Layout */}
+          <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
+            
+            {/* Top Metric Cards Row - DYNAMICALLY UPDATED & BLACK BOLD NUMBERS */}
+            <div className="grid grid-cols-4 gap-4">
+              <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-xs">
+                <span className="text-xs text-slate-500 font-medium block">Target District EVs ({predictionState.pinData.district})</span>
+                <span className="text-2xl font-black text-slate-950 font-mono mt-1 block">
+                  {predictionState.districtEvCount.toLocaleString()}
+                </span>
+              </div>
+              <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-xs">
+                <span className="text-xs text-slate-500 font-medium block">Public Chargers Supply</span>
+                <span className="text-2xl font-black text-slate-950 font-mono mt-1 block">
+                  {predictionState.districtChargers} units
+                </span>
+              </div>
+              <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-xs">
+                <span className="text-xs text-slate-500 font-medium block">EV / Charger Ratio</span>
+                <span className="text-2xl font-black text-slate-950 font-mono mt-1 block">
+                  {predictionState.evRatio}
+                </span>
+              </div>
+              <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-xs">
+                <span className="text-xs text-slate-500 font-medium block">Top Site ROI Potential</span>
+                <span className="text-2xl font-black text-slate-950 font-mono mt-1 block">
+                  {selectedCandidate.estRoi}% / year
+                </span>
+              </div>
+            </div>
+
+            {/* Map & Candidate List Split View */}
+            <div className="grid grid-cols-12 gap-6">
+              
+              {/* Candidate List (4 cols) */}
+              <div className="col-span-4 bg-white border border-slate-200 rounded-xl p-4 space-y-3 h-[560px] flex flex-col shadow-xs">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Optimal Candidate Sites</h3>
+                  <span className="text-[10px] text-slate-500 font-mono">Pincode: {formPincode}</span>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto space-y-2">
+                  {predictionState.candidates.map(c => (
+                    <div
+                      key={c.id}
+                      onClick={() => setSelectedCandidate(c)}
+                      className={`p-3.5 rounded-lg border cursor-pointer transition ${c.id === selectedCandidate.id ? 'bg-sky-50 border-[#0099ff] shadow-xs' : 'bg-white border-slate-200 hover:border-slate-300'}`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-xs text-slate-900">#{c.rank} {c.name}</span>
+                        {/* Numbers BLACK AND BOLD */}
+                        <span className="text-xs font-mono font-black text-slate-950 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{c.score}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-1">{c.district} • <strong className="text-slate-950 font-black">{c.predictedSessions}</strong> sessions/day</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* GIS Map View (8 cols) */}
+              <div className="col-span-8 bg-white border border-slate-200 rounded-xl overflow-hidden relative h-[560px] shadow-xs">
+                <div ref={mapContainerRef} className="w-full h-full"></div>
+              </div>
+
+            </div>
+
+            {/* Section Tabs Switcher */}
+            <div className="space-y-4">
+              <div className="flex gap-2 border-b border-slate-200 pb-3">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('intelligence')}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    activeTab === 'intelligence'
+                      ? 'bg-[#0099ff] text-white shadow-xs'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  Location Intelligence & Drivers
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('simulator')}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    activeTab === 'simulator'
+                      ? 'bg-[#0099ff] text-white shadow-xs'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  Investor Financial Simulator
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('district')}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    activeTab === 'district'
+                      ? 'bg-[#0099ff] text-white shadow-xs'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  District Deficit Matrix
+                </button>
+              </div>
+
+              {/* Tab 1: Location Intelligence */}
+              {activeTab === 'intelligence' && (
+                <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-6 shadow-xs">
+                  <div className="flex justify-between items-start border-b border-slate-100 pb-4">
+                    <div>
+                      <span className="bg-sky-50 text-[#0099ff] border border-sky-100 text-xs px-2.5 py-0.5 rounded-md font-bold uppercase">Rank #{selectedCandidate.rank} Location</span>
+                      <h2 className="text-lg font-bold text-slate-900 mt-1">{selectedCandidate.name}</h2>
+                      <p className="text-xs text-slate-500">{selectedCandidate.address}</p>
+                    </div>
+                    <div className="text-center bg-slate-50 p-3 rounded-lg border border-slate-200">
+                      <div className="text-[10px] text-slate-500 uppercase font-bold">AI Score</div>
+                      {/* Black and Bold Number */}
+                      <div className="text-2xl font-black text-slate-950 font-mono">{selectedCandidate.score}</div>
+                    </div>
+                  </div>
+
+                  {/* Operational Metrics Row - BLACK AND BOLD NUMBERS */}
+                  <div className="grid grid-cols-4 gap-3 text-center">
+                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                      <span className="text-[10px] text-slate-500 font-medium">Est Sessions</span>
+                      <p className="text-base font-black text-slate-950 mt-0.5 font-mono">{selectedCandidate.predictedSessions} / day</p>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                      <span className="text-[10px] text-slate-500 font-medium">Est Energy Sold</span>
+                      <p className="text-base font-black text-slate-950 mt-0.5 font-mono">{selectedCandidate.predictedKwh} kWh/day</p>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                      <span className="text-[10px] text-slate-500 font-medium">Est Annual ROI</span>
+                      <p className="text-base font-black text-slate-950 mt-0.5 font-mono">{selectedCandidate.estRoi}%</p>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                      <span className="text-[10px] text-slate-500 font-medium">Payback</span>
+                      <p className="text-base font-black text-slate-950 mt-0.5 font-mono">{selectedCandidate.estPaybackMonths} months</p>
+                    </div>
+                  </div>
+
+                  {/* Feature Drivers */}
+                  <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
+                    <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Key Location Feature Drivers</h3>
+                    <div className="space-y-2 text-xs">
+                      {selectedCandidate.shapFeatures.map((f, i) => (
+                        <div key={i} className="bg-white p-3 rounded-md border border-slate-200 flex items-start gap-3 shadow-xs">
+                          <span className="bg-slate-100 text-slate-950 font-mono font-black px-2 py-0.5 rounded border border-slate-200">{f.weight}</span>
+                          <div>
+                            <p className="font-bold text-slate-900">{f.feature}</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">{f.desc}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 2: Financial Simulator */}
+              {activeTab === 'simulator' && (
+                <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-6 shadow-xs">
+                  <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+                    <h2 className="text-base font-bold text-slate-900">Investor Financial & ROI Return Simulator</h2>
+                    <div className="text-right">
+                      <span className="text-[10px] text-slate-500 block uppercase font-bold">Estimated Capex</span>
+                      {/* Black and Bold Number */}
+                      <span className="text-xl font-black text-slate-950 font-mono">₹{(totalCapex / 100000).toFixed(2)} Lakhs</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-12 gap-6">
+                    <div className="col-span-5 bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-4 text-xs">
+                      <h3 className="font-bold text-slate-800 uppercase tracking-wider">Configuration Inputs</h3>
+                      
+                      <div className="space-y-1.5">
+                        <label className="text-slate-600 block">DC 50kW Dual Charger Qty</label>
+                        <div className="flex items-center gap-3">
+                          <button onClick={() => setDc50Qty(Math.max(0, dc50Qty - 1))} className="w-7 h-7 rounded bg-white border border-slate-300 font-bold">-</button>
+                          <span className="font-mono font-black text-slate-950 text-sm">{dc50Qty}</span>
+                          <button onClick={() => setDc50Qty(dc50Qty + 1)} className="w-7 h-7 rounded bg-white border border-slate-300 font-bold">+</button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-slate-600 block">Retail Selling Tariff (₹/kWh)</label>
+                        <input type="range" min="12" max="25" value={sellTariff} onChange={e => setSellTariff(Number(e.target.value))} className="w-full accent-[#0099ff]" />
+                        <span className="font-mono text-slate-950 font-black">₹{sellTariff}/kWh</span>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-slate-600 block">Target Utilization %</label>
+                        <input type="range" min="15" max="75" value={targetUtil} onChange={e => setTargetUtil(Number(e.target.value))} className="w-full accent-[#0099ff]" />
+                        <span className="font-mono text-slate-950 font-black">{targetUtil}%</span>
+                      </div>
+                    </div>
+
+                    <div className="col-span-7 space-y-4">
+                      <div className="grid grid-cols-3 gap-3 text-center">
+                        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                          <span className="text-[10px] text-slate-500 font-semibold uppercase">Annual ROI</span>
+                          <p className="text-xl font-black text-slate-950 font-mono mt-1">{roiPercent}%</p>
+                        </div>
+                        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                          <span className="text-[10px] text-slate-500 font-semibold uppercase">Payback Period</span>
+                          <p className="text-xl font-black text-slate-950 font-mono mt-1">{paybackMonths} mo</p>
+                        </div>
+                        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                          <span className="text-[10px] text-slate-500 font-semibold uppercase">Monthly Net Profit</span>
+                          <p className="text-lg font-black text-slate-950 font-mono mt-1">₹{(monthlyNetProfit / 1000).toFixed(0)}k</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 3: District Deficit Matrix (Fixed & Fully Interactive) */}
+              {activeTab === 'district' && (
+                <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4 shadow-xs">
+                  <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                    <div>
+                      <h2 className="text-base font-bold text-slate-900">Delhi NCT District Infrastructure Gap Matrix</h2>
+                      <p className="text-xs text-slate-500">Official MoHUA Urban Planning Benchmark (Target 1 Public Charger per 25 EVs)</p>
+                    </div>
+                    <span className="bg-sky-50 text-[#0099ff] border border-sky-100 text-xs px-2.5 py-1 rounded-md font-bold">
+                      Active Filter: Pincode {formPincode} ({predictionState.pinData.district})
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                    <table className="w-full text-left text-xs text-slate-700">
+                      <thead className="bg-slate-50 uppercase text-[10px] text-slate-500 border-b border-slate-200">
+                        <tr>
+                          <th className="p-3">District</th>
+                          <th className="p-3">Registered EVs</th>
+                          <th className="p-3">YoY Growth</th>
+                          <th className="p-3">Public Chargers</th>
+                          <th className="p-3">EV / Charger Ratio</th>
+                          <th className="p-3">Deficit Score</th>
+                          <th className="p-3">Key Priority Corridor</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {DELHI_DISTRICTS_MATRIX.map((d, i) => {
+                          const isTargetDistrict = d.name.toLowerCase() === predictionState.pinData.district.toLowerCase();
+                          return (
+                            <tr key={i} className={`transition ${isTargetDistrict ? 'bg-sky-50/90 font-bold border-l-4 border-l-[#0099ff]' : 'hover:bg-slate-50'}`}>
+                              <td className="p-3 font-bold text-slate-900">
+                                {d.name} {isTargetDistrict && <span className="ml-1 text-[10px] bg-[#0099ff] text-white px-1.5 py-0.5 rounded">Target Zone</span>}
+                              </td>
+                              <td className="p-3 font-mono font-black text-slate-950">{d.evs.toLocaleString()}</td>
+                              <td className="p-3 font-mono font-black text-slate-950">{d.growth}</td>
+                              <td className="p-3 font-mono font-black text-slate-950">{d.chargers}</td>
+                              <td className="p-3 font-mono font-black text-slate-950">{d.ratio}</td>
+                              <td className="p-3">
+                                <span className="bg-slate-100 text-slate-950 border border-slate-200 px-2 py-0.5 rounded font-mono font-black">
+                                  {d.score} / 100
+                                </span>
+                              </td>
+                              <td className="p-3 text-slate-600 text-[11px]">{d.topCorridor}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+          </main>
+
+          {/* Predictor Form Modal */}
+          {showPredictorModal && (
+            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-[1000] flex items-center justify-center p-4">
+              <div className="bg-white border border-slate-200 rounded-xl max-w-md w-full p-6 space-y-4 text-slate-900 shadow-xl">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                  <h3 className="font-bold text-xl text-[#0099ff]">EV Charging Station Predictor</h3>
+                  <button onClick={() => setShowPredictorModal(false)} className="text-slate-400 hover:text-slate-700 font-bold text-base cursor-pointer">✕</button>
+                </div>
+                
+                <form onSubmit={handleRunPrediction} className="space-y-3 text-xs">
+                  <div>
+                    <label className="font-medium text-slate-700 block mb-1">City</label>
+                    <input type="text" value={formCity} onChange={e => setFormCity(e.target.value)} className="w-full border border-slate-300 p-2 rounded-md font-medium focus:border-[#0099ff] focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="font-medium text-slate-700 block mb-1">State</label>
+                    <input type="text" value={formState} onChange={e => setFormState(e.target.value)} className="w-full border border-slate-300 p-2 rounded-md font-medium focus:border-[#0099ff] focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="font-medium text-slate-700 block mb-1">Pincode</label>
+                    <input type="text" value={formPincode} onChange={e => setFormPincode(e.target.value)} className="w-full border border-slate-300 p-2 rounded-md font-medium focus:border-[#0099ff] focus:outline-none" placeholder="e.g. 110006, 110019, 110058, 110092, 110017, 110001, 110037, 110085, 110075" />
+                  </div>
+                  <div>
+                    <label className="font-medium text-slate-700 block mb-1">Radius (miles/km)</label>
+                    <input type="text" value={formRadius} onChange={e => setFormRadius(e.target.value)} className="w-full border border-slate-300 p-2 rounded-md font-medium focus:border-[#0099ff] focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="font-medium text-slate-700 block mb-1">Points of Interest (comma-separated)</label>
+                    <input type="text" value={formPois} onChange={e => setFormPois(e.target.value)} className="w-full border border-slate-300 p-2 rounded-md font-medium focus:border-[#0099ff] focus:outline-none" placeholder="e.g. Hotel, Fast Food, Grocery Store, Metro Station" />
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      className="w-full py-2.5 rounded-md text-xs font-bold btn-electric-blue transition shadow-xs cursor-pointer"
+                    >
+                      Predict
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+
+</body>
+</html>
