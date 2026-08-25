@@ -309,7 +309,7 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="border-t border-slate-200 py-6 text-center text-xs text-slate-500 bg-white">
-        <p>© 2026 EV Charging Station Predictor • SIH Problem ID BV806 • Delhi NCT</p>
+        <p>© 2026 EV Charging Station Predictor • SIH Problem ID SIH25-806 • Delhi NCT</p>
       </footer>
 
       {/* Predictor Form Modal matching mentor UI video screenshot */}

@@ -28,7 +28,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               EV Charging Station Predictor
             </h1>
             <p className="text-xs text-slate-500">
-              SIH BV806 • Delhi NCT Decision Platform
+              SIH SIH25-806 • Delhi NCT Decision Platform
             </p>
           </div>
         </div>
