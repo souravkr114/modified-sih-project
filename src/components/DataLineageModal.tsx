@@ -26,7 +26,7 @@ export const DataLineageModal: React.FC<DataLineageModalProps> = ({ isOpen, onCl
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-900 tracking-tight">Data Lineage & Provenance Register</h2>
-              <p className="text-xs text-slate-500">SIH SIH25-806 • Strict Data Quality & Source Provenance</p>
+              <p className="text-xs text-slate-500">SIH25-806 • Strict Data Quality & Source Provenance</p>
             </div>
           </div>
 
