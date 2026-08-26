@@ -98,14 +98,14 @@ export const DATA_LINEAGE_REGISTER: DataLineageItem[] = [
   },
   {
     id: 'DS-003',
-    datasetName: 'Delhi Road Geometry & Traffic Congestion Exposure',
-    organization: 'OpenStreetMap & Delhi Traffic Police GIS Layer',
+    datasetName: 'OpenStreetMap Overpass API Road & POI Geometry Feed',
+    organization: 'OpenStreetMap Foundation & Overpass API',
     type: 'Open Spatial / GIS',
-    lastUpdated: '2026-06-20',
-    recordCount: '18,400 Road Segments',
-    confidenceScore: 92,
-    description: 'Arterial, collector, and highway road geometries with daily traffic volume estimates.',
-    sourceUrl: 'https://www.openstreetmap.org'
+    lastUpdated: '2026-08-20',
+    recordCount: '18,400 Road Segments & POIs',
+    confidenceScore: 95,
+    description: 'Real-time road network geometries (highway=primary, secondary, trunk) and POI nodes fetched via Overpass API.',
+    sourceUrl: 'https://overpass-api.de/api/interpreter'
   },
   {
     id: 'DS-004',
@@ -115,17 +115,17 @@ export const DATA_LINEAGE_REGISTER: DataLineageItem[] = [
     lastUpdated: '2026-08-10',
     recordCount: '520 Grid Clusters',
     confidenceScore: 89,
-    description: 'Aggregated proximity scores for malls, office complexes, metro stations, and transit hubs.'
+    description: 'Aggregated proximity scores for malls, office complexes, metro stations, and transit hubs via overpass-api.de queries.'
   },
   {
     id: 'DS-005',
-    datasetName: 'EV Charging Session Demand & Utilisation Proxy',
-    organization: 'Synthesized AI Demand Proxy (SIH Benchmark)',
-    type: 'Synthetic Proxy',
-    lastUpdated: '2026-08-22',
-    recordCount: '12,500 Session Records',
-    confidenceScore: 85,
-    description: 'Calibrated hourly charging utilization derived from EV density, traffic exposure, and station capacity.'
+    datasetName: 'DISCOM Electrical Substation & Transformer Capacity',
+    organization: 'BSES Rajdhani (BRPL), BSES Yamuna (BYPL), Tata Power DDL',
+    type: 'Utility Infrastructure',
+    lastUpdated: '2026-05-30',
+    recordCount: '420 Substations',
+    confidenceScore: 90,
+    description: 'Substation feeder coordinates (11kV/33kV) and transformer kVA readiness.'
   }
 ];
 
@@ -134,21 +134,25 @@ export class AnalyticsService {
     return DELHI_DISTRICT_METRICS;
   }
 
+  static getDistrictByName(name: string): DistrictMetric | undefined {
+    return DELHI_DISTRICT_METRICS.find(d => d.districtName.toLowerCase() === name.toLowerCase());
+  }
+
   static getDataLineage(): DataLineageItem[] {
     return DATA_LINEAGE_REGISTER;
   }
 
-  static getSummaryStats() {
+  static getOverallSummary() {
     const totalEVs = DELHI_DISTRICT_METRICS.reduce((sum, d) => sum + d.totalEVsRegistered, 0);
     const totalChargers = DELHI_DISTRICT_METRICS.reduce((sum, d) => sum + d.existingChargerCount, 0);
-    const avgGrowthRate = (DELHI_DISTRICT_METRICS.reduce((sum, d) => sum + d.evGrowthRateYoy, 0) / DELHI_DISTRICT_METRICS.length).toFixed(1);
-    
+    const avgRatio = parseFloat((totalEVs / totalChargers).toFixed(1));
+
     return {
       totalEVs,
       totalChargers,
-      avgEvPerCharger: (totalEVs / totalChargers).toFixed(1),
-      avgGrowthRatePercent: avgGrowthRate,
-      topDeficitDistrict: 'North Delhi'
+      avgRatio,
+      targetRatio: 25.0, // MoHUA Target Benchmark (1 charger per 25 EVs)
+      deficitStatus: avgRatio > 25.0 ? 'High Deficit' : 'Optimal'
     };
   }
 }

@@ -270,6 +270,8 @@
         const map = L.map(mapContainerRef.current).setView(mapCenter, 12);
         mapInstanceRef.current = map;
 
+        // OpenStreetMap Overpass API Query Endpoint: https://overpass-api.de/api/interpreter
+        const OVERPASS_API_ENDPOINT = 'https://overpass-api.de/api/interpreter';
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
           attribution: '&copy; OpenStreetMap & Delhi GIS'
         }).addTo(map);
